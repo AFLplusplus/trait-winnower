@@ -1,0 +1,24 @@
+# .codecov.yml
+# Tresholds are lenient in the beginning
+
+coverage:
+  range: 70..100
+  round: down
+  precision: 1
+
+  status:
+    project:
+      default:
+        threshold: 5%
+    patch:
+      default:
+        target: 60%
+        threshold: 10%
+
+ignore:
+  - "tests"
+  - "examples"
+
+comment:
+  layout: "files"
+  require_changes: true

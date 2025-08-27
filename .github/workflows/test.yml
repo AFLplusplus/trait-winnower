@@ -1,0 +1,106 @@
+# .test.yml
+
+name: test
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  merge_group:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  required:
+    runs-on: ubuntu-latest
+    name: ubuntu / ${{ matrix.toolchain }}
+    strategy:
+      matrix:
+        toolchain: [stable, beta] 
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install ${{ matrix.toolchain }}
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.toolchain }}
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo generate-lockfile 
+        if: hashFiles('Cargo.lock') == ''
+        run: cargo generate-lockfile
+      - name: cargo test --locked (all targets)
+        run: cargo test --locked --all-features --all-targets
+      - name: cargo test --doc (locked)
+        run: cargo test --locked --all-features --doc
+
+  minimal:
+    runs-on: ubuntu-latest
+    name: ubuntu / stable / minimal-versions
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install stable
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install nightly for -Zminimal-versions
+        uses: dtolnay/rust-toolchain@nightly
+      - uses: Swatinem/rust-cache@v2
+      - name: Set default to stable
+        run: rustup default stable
+      - name: cargo update -Z minimal-versions
+        run: cargo +nightly update -Z minimal-versions
+      - name: cargo test (locked)
+        run: cargo test --locked --all-features --all-targets
+
+  os-check:
+    runs-on: ${{ matrix.os }}
+    name: ${{ matrix.os }} / stable
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install stable
+        uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo generate-lockfile 
+        if: hashFiles('Cargo.lock') == ''
+        run: cargo generate-lockfile
+      - name: cargo test (locked)
+        run: cargo test --locked --all-features --all-targets
+
+  coverage:
+    runs-on: ubuntu-latest
+    name: ubuntu / stable / coverage
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install stable + llvm-tools
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+      - name: cargo generate-lockfile 
+        if: hashFiles('Cargo.lock') == ''
+        run: cargo generate-lockfile
+      - name: cargo llvm-cov (produce lcov.info)
+        run: cargo llvm-cov --locked --all-features --lcov --output-path lcov.info
+      - name: Record OS/Rust (for Codecov)
+        run: |
+          echo "OS=${{ runner.os }}" >> "$GITHUB_ENV"
+          echo "RUST=$(rustc --version)" >> "$GITHUB_ENV"
+      - name: Upload to codecov.io (OIDC)
+        if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false }}
+        uses: codecov/codecov-action@v5
+        with:
+          use_oidc: true
+          files: lcov.info
+          env_vars: OS,RUST
+          fail_ci_if_error: true

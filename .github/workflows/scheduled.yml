@@ -1,0 +1,49 @@
+name: rolling
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  schedule:
+    # Every Friday at 13:13 UTC. So help me God
+    - cron: '13 13 * * 5'
+  merge_group:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  nightly:
+    runs-on: ubuntu-latest
+    name: ubuntu / nightly
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo generate-lockfile
+        if: hashFiles('Cargo.lock') == ''
+        run: cargo generate-lockfile
+      - name: cargo test --locked
+        run: cargo test --locked --all-features --all-targets
+
+  update:
+    runs-on: ubuntu-latest
+    name: ubuntu / beta / updated
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install beta
+        if: hashFiles('Cargo.lock') != ''
+        uses: dtolnay/rust-toolchain@beta
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo update
+        if: hashFiles('Cargo.lock') != ''
+        run: cargo update
+      - name: cargo test
+        if: hashFiles('Cargo.lock') != ''
+        run: cargo test --locked --all-features --all-targets
+        env:
+          RUSTFLAGS: -D deprecated

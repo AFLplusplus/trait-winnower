@@ -13,6 +13,9 @@ fn dies_no_args() -> TestResult {
 
     cmd.assert()
         .failure()
-        .stderr(contains("Usage: trait-winnower [OPTIONS] <COMMAND>"));
+        .stderr(contains("Usage:"))
+        .stderr(contains("[OPTIONS] <COMMAND>"))
+        .stderr(contains("Commands:"));
+
     Ok(())
 }
