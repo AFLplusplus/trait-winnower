@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     name: ubuntu / nightly
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@nightly
       - uses: Swatinem/rust-cache@v2
       - name: cargo generate-lockfile
@@ -34,7 +34,7 @@ jobs:
     runs-on: ubuntu-latest
     name: ubuntu / beta / updated
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install beta
         if: hashFiles('Cargo.lock') != ''
         uses: dtolnay/rust-toolchain@beta
