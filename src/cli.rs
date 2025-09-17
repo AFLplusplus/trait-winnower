@@ -1,6 +1,8 @@
 // src/cli.rs
 //! CLI argument parser for trait-winnower.
 
+#![deny(missing_docs)]
+
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
@@ -43,12 +45,12 @@ pub enum Commands {
     /// Prune undue/overly-strong trait bounds.
     Prune {
         /// Target to operate on. Defaults to ".".
-        target: Option<String>,
+        target: Option<PathBuf>,
     },
 
     /// Check target and report likely unnecessary trait bounds.
     Check {
         /// Target to check. Defaults to ".".
-        target: Option<String>,
+        target: Option<PathBuf>,
     },
 }
