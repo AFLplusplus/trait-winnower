@@ -23,44 +23,19 @@ impl TraitInfo {
     pub fn debug_print_itemref(item: &ItemRef) {
         match item {
             ItemRef::Func(f) => {
-                let file = File {
-                    shebang: None,
-                    attrs: vec![],
-                    items: vec![Item::Fn((**f).clone())],
-                };
-                println!("{}", prettyplease::unparse(&file));
+                Self::unparse_item(Item::Fn((**f).clone()));
             }
             ItemRef::Struct(s) => {
-                let file = File {
-                    shebang: None,
-                    attrs: vec![],
-                    items: vec![Item::Struct((**s).clone())],
-                };
-                println!("{}", prettyplease::unparse(&file));
+                Self::unparse_item(Item::Struct((**s).clone()));
             }
             ItemRef::Enum(e) => {
-                let file = File {
-                    shebang: None,
-                    attrs: vec![],
-                    items: vec![Item::Enum((**e).clone())],
-                };
-                println!("{}", prettyplease::unparse(&file));
+                Self::unparse_item(Item::Enum((**e).clone()));
             }
             ItemRef::Trait(t) => {
-                let file = File {
-                    shebang: None,
-                    attrs: vec![],
-                    items: vec![Item::Trait((**t).clone())],
-                };
-                println!("{}", prettyplease::unparse(&file));
+                Self::unparse_item(Item::Trait((**t).clone()));
             }
             ItemRef::Impl(i) => {
-                let file = File {
-                    shebang: None,
-                    attrs: vec![],
-                    items: vec![Item::Impl((**i).clone())],
-                };
-                println!("{}", prettyplease::unparse(&file));
+                Self::unparse_item(Item::Impl((**i).clone()));
             }
             ItemRef::ImplMethod { method, .. } => {
                 println!("{}", method.to_token_stream());
@@ -69,5 +44,15 @@ impl TraitInfo {
                 println!("{}", method.to_token_stream());
             }
         }
+    }
+
+    #[inline]
+    fn unparse_item(item: Item) {
+        let file = File {
+            shebang: None,
+            attrs: vec![],
+            items: vec![item],
+        };
+        println!("{}", prettyplease::unparse(&file));
     }
 }
