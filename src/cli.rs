@@ -1,4 +1,3 @@
-// src/cli.rs
 //! CLI argument parser for trait-winnower.
 
 #![deny(missing_docs)]
@@ -15,11 +14,18 @@ use std::path::PathBuf;
     disable_help_subcommand = true
 )]
 pub struct Cli {
-    /// Increase verbosity (-v, -vv).
-    #[arg(short, long, action = clap::ArgAction::Count, global = true)]
+    /// Set verbosity level: -v=1, -v=2, -v=3
+    #[arg(
+        short = 'v',
+        long = "verbose",
+        value_name = "LEVEL",
+        default_value_t = 0,
+        value_parser = clap::value_parser!(u8).range(0..=3),
+        global = true
+    )]
     pub verbose: u8,
 
-    /// Silence all output.
+    /// Silence all output (overrides -v).
     #[arg(short, long, global = true)]
     pub quiet: bool,
 
@@ -52,5 +58,9 @@ pub enum Commands {
     Check {
         /// Target to check. Defaults to ".".
         target: Option<PathBuf>,
+
+        /// Show only the top N trait bounds.
+        #[arg(short, long)]
+        top: Option<String>,
     },
 }
