@@ -9,5 +9,4 @@ pub mod config;
 pub mod discover;
 pub mod error;
 pub mod info;
-pub mod removable;
 pub mod target;
