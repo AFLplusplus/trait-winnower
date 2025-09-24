@@ -1,4 +1,4 @@
-// src/error.rs
+// src/target.rs
 //! Source targets for trait-winnower.
 
 #![deny(missing_docs)]
