@@ -7,6 +7,26 @@ use crate::error::TraitError;
 use serde::{Deserialize, Serialize};
 use std::{fs, path::Path, path::PathBuf};
 
+/// Configuration for cargo check execution.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CargoCheckConfig {
+    /// Cargo check arguments (e.g., ["--workspace", "--all-features", "--all-targets", "--quiet"]).
+    pub args: Vec<String>,
+}
+
+impl Default for CargoCheckConfig {
+    fn default() -> Self {
+        Self {
+            args: vec![
+                "--workspace".into(),
+                "--all-features".into(),
+                "--all-targets".into(),
+                "--quiet".into(),
+            ],
+        }
+    }
+}
+
 /// Config struct for trait-winnower.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Config {
@@ -14,6 +34,8 @@ pub struct Config {
     pub include: Vec<String>,
     /// Exclude files.
     pub exclude: Vec<String>,
+    /// Cargo check configuration.
+    pub cargo_check: CargoCheckConfig,
 }
 
 impl Default for Config {
@@ -25,6 +47,7 @@ impl Default for Config {
                 "**/.git/**".into(),
                 "**/tests/**".into(),
             ],
+            cargo_check: CargoCheckConfig::default(),
         }
     }
 }
@@ -47,6 +70,10 @@ impl Config {
             }
             if cfg.exclude.is_empty() {
                 cfg.exclude = Config::default().exclude;
+            }
+            // If cargo_check is not specified in the config, use defaults
+            if cfg.cargo_check.args.is_empty() {
+                cfg.cargo_check = CargoCheckConfig::default();
             }
             Ok(cfg)
         } else {
