@@ -9,6 +9,9 @@ use syn::{
     TraitItemFn, Type, TypeParamBound, punctuated::Punctuated, token::Plus, visit::Visit,
 };
 
+use paste::paste;
+use proc_macro2::Span;
+
 /// Reference to a Rust item in the AST.
 pub enum ItemRef<'ast> {
     /// A free-standing function.
@@ -41,10 +44,9 @@ pub enum ItemRef<'ast> {
 
 /// A lightweight identity/label for an inspected item.
 pub struct ItemKey<'ast> {
-    /// Which item this is (incl. AST).
-    pub item: ItemRef<'ast>,
-    /// Human-readable label.
-    pub label: String,
+    item: ItemRef<'ast>,
+    label: String,
+    span: Span,
 }
 
 /// Generate label-formatting helpers on `ItemKey`.
@@ -74,6 +76,39 @@ define_item_labels! {
     trait_method_label  (trait_name, method)  => "// trait {}::{}";
 }
 
+impl<'ast> ItemKey<'ast> {
+    /// Convenience: require an ident or explain why not.
+    #[inline]
+    pub fn ident(&self) -> Option<&'ast syn::Ident> {
+        self.ident_opt()
+    }
+
+    /// Get the item.
+    #[inline]
+    pub fn item(&self) -> &ItemRef<'ast> {
+        &self.item
+    }
+
+    /// Get the span of the item.
+    #[inline]
+    pub fn span(&self) -> Span {
+        self.span
+    }
+
+    #[inline]
+    fn ident_opt(&self) -> Option<&'ast syn::Ident> {
+        match self.item {
+            ItemRef::Func(f) => Some(&f.sig.ident),
+            ItemRef::Struct(s) => Some(&s.ident),
+            ItemRef::Enum(e) => Some(&e.ident),
+            ItemRef::Trait(t) => Some(&t.ident),
+            ItemRef::Impl(_) => None,
+            ItemRef::ImplMethod { method, .. } => Some(&method.sig.ident),
+            ItemRef::TraitMethod { method, .. } => Some(&method.sig.ident),
+        }
+    }
+}
+
 impl<'ast> std::fmt::Display for ItemKey<'ast> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.label)
@@ -81,13 +116,25 @@ impl<'ast> std::fmt::Display for ItemKey<'ast> {
 }
 
 macro_rules! define_bounds_types {
-    ( $( $name:ident ),+ $(,)? ) => {
+    ( $( $name:ident,)+ $(,)? ) => {
         $(
             #[allow(missing_docs, reason = "macro-generated code")]
-            struct $name<'ast> {
+            pub struct $name<'ast> {
                 item: ItemKey<'ast>,
-                _type_params: Vec<TypeParamBounds>,
-                _where_preds: Vec<WhereTypeBounds>,
+                type_params: Vec<TypeParamBounds>,
+                where_preds: Vec<WhereTypeBounds>,
+            }
+
+            impl<'ast> $name<'ast> {
+                #[allow(missing_docs, reason = "macro-generated code")]
+                pub fn type_param_bounds(&self) -> &[TypeParamBounds] { &self.type_params }
+
+                #[allow(missing_docs, reason = "macro-generated code")]
+                pub fn where_bounds(&self) -> &[WhereTypeBounds] { &self.where_preds }
+
+                #[allow(missing_docs, reason = "macro-generated code")]
+                pub fn item_key(&self) -> &ItemKey<'ast> { &self.item }
+
             }
         )+
     };
@@ -112,6 +159,38 @@ pub struct ItemBounds<'ast> {
     impl_methods: Vec<ImplMethodBounds<'ast>>,
     enums: Vec<EnumBounds<'ast>>,
     structs: Vec<StructBounds<'ast>>,
+}
+
+macro_rules! define_bounds_slice {
+    ( $( $method:ident, $field:ident, $ty:ty )+ ) => {
+        paste! {
+            $(
+                impl<'ast> ItemBounds<'ast> {
+                    #[allow(missing_docs, reason = "macro-generated")]
+                    pub fn $method(&self) -> &$ty {
+                        &self.$field
+                    }
+
+                    #[allow(missing_docs, reason = "macro-generated")]
+                    pub fn [< $method _mut >](&mut self) -> &mut $ty {
+                        &mut self.$field
+                    }
+                }
+            )+
+        }
+    };
+}
+
+paste! {
+    define_bounds_slice! {
+        fns, fns, Vec<FnBounds<'ast>>
+        traits, traits, Vec<TraitBounds<'ast>>
+        trait_methods, trait_methods, Vec<TraitMethodBounds<'ast>>
+        impl_methods, impl_methods, Vec<ImplMethodBounds<'ast>>
+        enums, enums, Vec<EnumBounds<'ast>>
+        structs, structs, Vec<StructBounds<'ast>>
+        impls, impls, Vec<ImplBounds<'ast>>
+    }
 }
 
 impl<'ast> ItemBounds<'ast> {
@@ -164,14 +243,58 @@ struct Collector<'ast> {
     out: ItemBounds<'ast>,
 }
 
-struct TypeParamBounds {
-    _ident: Ident,
-    _bounds: Punctuated<TypeParamBound, Plus>,
+/// Where a bound lives on a type parameter in the function's generic list.
+pub struct TypeParamBounds {
+    ident: Ident,
+    bounds: Punctuated<TypeParamBound, Plus>,
+    param_index: usize,
 }
 
-struct WhereTypeBounds {
-    _ty: Type,
-    _bounds: Punctuated<TypeParamBound, Plus>,
+impl TypeParamBounds {
+    /// The identifier of the type parameter.
+    #[inline]
+    pub fn ident(&self) -> &Ident {
+        &self.ident
+    }
+
+    /// The bounds of the type parameter.
+    #[inline]
+    pub fn bounds(&self) -> &Punctuated<TypeParamBound, Plus> {
+        &self.bounds
+    }
+
+    /// The index of the type parameter in the generic list.
+    #[inline]
+    pub fn param_index(&self) -> usize {
+        self.param_index
+    }
+}
+
+/// Where a bound lives on a type parameter in the function's generic list.
+pub struct WhereTypeBounds {
+    ty: Box<Type>,
+    bounds: Punctuated<TypeParamBound, Plus>,
+    pred_index: usize,
+}
+
+impl WhereTypeBounds {
+    /// The bounded type.
+    #[inline]
+    pub fn bounded_ty(&self) -> &Type {
+        &self.ty
+    }
+
+    /// The bounds of the type parameter.
+    #[inline]
+    pub fn bounds(&self) -> &Punctuated<TypeParamBound, Plus> {
+        &self.bounds
+    }
+
+    /// The index of the type parameter in the generic list.
+    #[inline]
+    pub fn pred_index(&self) -> usize {
+        self.pred_index
+    }
 }
 
 impl<'ast> Collector<'ast> {
@@ -179,11 +302,13 @@ impl<'ast> Collector<'ast> {
         use syn::{GenericParam, TypeParam};
         gens.params
             .iter()
-            .filter_map(|p| match p {
+            .enumerate()
+            .filter_map(|(idx, p)| match p {
                 GenericParam::Type(TypeParam { ident, bounds, .. }) if !bounds.is_empty() => {
                     Some(TypeParamBounds {
-                        _ident: ident.clone(),
-                        _bounds: bounds.clone(),
+                        ident: ident.clone(),
+                        bounds: bounds.clone(),
+                        param_index: idx,
                     })
                 }
                 _ => None,
@@ -194,13 +319,14 @@ impl<'ast> Collector<'ast> {
     fn where_bounds(&self, gens: &syn::Generics) -> Vec<WhereTypeBounds> {
         let mut out = Vec::new();
         if let Some(wc) = &gens.where_clause {
-            for pred in wc.predicates.iter() {
+            for (pred_index, pred) in wc.predicates.iter().enumerate() {
                 if let syn::WherePredicate::Type(t) = pred
                     && !t.bounds.is_empty()
                 {
                     out.push(WhereTypeBounds {
-                        _ty: t.bounded_ty.clone(),
-                        _bounds: t.bounds.clone(),
+                        ty: Box::new(t.bounded_ty.clone()),
+                        bounds: t.bounds.clone(),
+                        pred_index,
                     });
                 }
             }
@@ -224,67 +350,74 @@ impl<'ast> Visit<'ast> for Collector<'ast> {
     fn visit_item(&mut self, i: &'ast Item) {
         match i {
             Item::Fn(f) => {
-                let label = ItemKey::fn_label(&f.sig.ident.to_string());
+                let name = f.sig.ident.to_string();
+                let label = ItemKey::fn_label(&name);
                 self.push_if_any(&f.sig.generics, |this, tp, wb| {
                     this.out.fns.push(FnBounds {
                         item: ItemKey {
                             item: ItemRef::Func(f),
                             label: label.clone(),
+                            span: f.sig.ident.span(),
                         },
-                        _type_params: tp,
-                        _where_preds: wb,
+                        type_params: tp,
+                        where_preds: wb,
                     });
                 });
             }
 
             Item::Struct(s) => {
-                let label = ItemKey::struct_label(&s.ident.to_string());
+                let name = s.ident.to_string();
+                let label = ItemKey::struct_label(&name);
                 self.push_if_any(&s.generics, |this, tp, wb| {
                     this.out.structs.push(StructBounds {
                         item: ItemKey {
                             item: ItemRef::Struct(s),
                             label: label.clone(),
+                            span: s.ident.span(),
                         },
-                        _type_params: tp,
-                        _where_preds: wb,
+                        type_params: tp,
+                        where_preds: wb,
                     });
                 });
             }
 
             Item::Enum(e) => {
-                let label = ItemKey::enum_label(&e.ident.to_string());
+                let name = e.ident.to_string();
+                let label = ItemKey::enum_label(&name);
                 self.push_if_any(&e.generics, |this, tp, wb| {
                     this.out.enums.push(EnumBounds {
                         item: ItemKey {
                             item: ItemRef::Enum(e),
                             label: label.clone(),
+                            span: e.ident.span(),
                         },
-                        _type_params: tp,
-                        _where_preds: wb,
+                        type_params: tp,
+                        where_preds: wb,
                     });
                 });
             }
 
             Item::Trait(t) => {
-                let label = ItemKey::trait_label(&t.ident.to_string());
+                let trait_name = t.ident.to_string();
+                let label = ItemKey::trait_label(&trait_name);
                 self.push_if_any(&t.generics, |this, tp, wb| {
                     this.out.traits.push(TraitBounds {
                         item: ItemKey {
                             item: ItemRef::Trait(t),
                             label: label.clone(),
+                            span: t.ident.span(),
                         },
-                        _type_params: tp,
-                        _where_preds: wb,
+                        type_params: tp,
+                        where_preds: wb,
                     });
                 });
 
                 // Trait methods: generics live on the method *signature*.
                 for it in &t.items {
                     if let syn::TraitItem::Fn(m) = it {
-                        let mlabel = ItemKey::trait_method_label(
-                            &t.ident.to_string(),
-                            &m.sig.ident.to_string(),
-                        );
+                        let trait_name = t.ident.to_string();
+                        let mlabel =
+                            ItemKey::trait_method_label(&trait_name, &m.sig.ident.to_string());
                         self.push_if_any(&m.sig.generics, |this, tp, wb| {
                             this.out.trait_methods.push(TraitMethodBounds {
                                 item: ItemKey {
@@ -293,9 +426,10 @@ impl<'ast> Visit<'ast> for Collector<'ast> {
                                         method: m,
                                     },
                                     label: mlabel.clone(),
+                                    span: m.sig.ident.span(),
                                 },
-                                _type_params: tp,
-                                _where_preds: wb,
+                                type_params: tp,
+                                where_preds: wb,
                             });
                         });
                     }
@@ -312,15 +446,15 @@ impl<'ast> Visit<'ast> for Collector<'ast> {
                     ItemKey::impl_inherent_label(&self_ty_str)
                 };
 
-                // Impl header bounds (on the impl itself)
                 self.push_if_any(&im.generics, |this, tp, wb| {
                     this.out.impls.push(ImplBounds {
                         item: ItemKey {
                             item: ItemRef::Impl(im),
                             label: impl_label.clone(),
+                            span: im.impl_token.span,
                         },
-                        _type_params: tp,
-                        _where_preds: wb,
+                        type_params: tp,
+                        where_preds: wb,
                     });
                 });
 
@@ -341,9 +475,10 @@ impl<'ast> Visit<'ast> for Collector<'ast> {
                                         method: m,
                                     },
                                     label: mlabel.clone(),
+                                    span: m.sig.ident.span(),
                                 },
-                                _type_params: tp,
-                                _where_preds: wb,
+                                type_params: tp,
+                                where_preds: wb,
                             });
                         });
                     }
@@ -352,7 +487,7 @@ impl<'ast> Visit<'ast> for Collector<'ast> {
 
             _ => {}
         }
-        // continue into nested modules, etc.
+
         syn::visit::visit_item(self, i);
     }
 }
@@ -424,6 +559,21 @@ mod tests {
         "#;
         let labels = labels_from_src(src)?;
         assert_none(&labels);
+        Ok(())
+    }
+
+    #[test]
+    fn item_bounds_fn_in_module_records_path() -> TraitError<()> {
+        let src = r#"
+        mod outer {
+            fn foo<T: Copy>() {}
+        }
+        "#;
+        let file = syn::parse_file(src)?;
+        let items = ItemBounds::collect_items_in_file(&file)?;
+        assert_eq!(items.fns().len(), 1);
+        let info = &items.fns()[0];
+        assert_eq!(info.item.label, "// fn foo");
         Ok(())
     }
 
@@ -575,3 +725,5 @@ mod tests {
         Ok(())
     }
 }
+
+// TODO: Check supertraits and their methods.

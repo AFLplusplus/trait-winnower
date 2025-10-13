@@ -7,6 +7,7 @@ pub mod analysis;
 pub mod cli;
 pub mod config;
 pub mod discover;
+pub mod dynamic_analysis;
 pub mod error;
 pub mod info;
 pub mod target;

@@ -2,8 +2,29 @@
 
 #![deny(missing_docs)]
 
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
+
+/// Target types for pruning trait bounds.
+#[derive(Debug, Clone, ValueEnum)]
+pub enum TargetType {
+    /// Prune all types of trait bounds (default).
+    All,
+    /// Prune function trait bounds.
+    Function,
+    /// Prune impl trait bounds.
+    Impl,
+    /// Prune trait trait bounds.
+    Trait,
+    /// Prune trait method trait bounds.
+    TraitMethod,
+    /// Prune impl method trait bounds.
+    ImplMethod,
+    /// Prune enum trait bounds.
+    Enum,
+    /// Prune struct trait bounds.
+    Struct,
+}
 
 /// Reduce unnecessary Rust trait requirements.
 #[derive(Parser, Debug)]
@@ -28,6 +49,24 @@ pub struct Cli {
     /// Silence all output (overrides -v).
     #[arg(short, long, global = true)]
     pub quiet: bool,
+
+    /// Brute force removal of trait bounds.
+    #[arg(short, long, global = true)]
+    pub brute_force: bool,
+
+    /// Show only the top N trait bounds.
+    #[arg(short, long, global = true)]
+    pub number_of_items: Option<String>,
+
+    /// Type of target to operate on.
+    #[arg(
+        short = 't',
+        long = "target-type",
+        value_name = "TARGET_TYPE",
+        default_value = "all",
+        global = true
+    )]
+    pub target_type: TargetType,
 
     /// Subcommand to run.
     #[command(subcommand)]
@@ -58,9 +97,5 @@ pub enum Commands {
     Check {
         /// Target to check. Defaults to ".".
         target: Option<PathBuf>,
-
-        /// Show only the top N trait bounds.
-        #[arg(short, long)]
-        top: Option<String>,
     },
 }
