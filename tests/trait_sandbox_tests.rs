@@ -40,8 +40,7 @@ fn collect_bounds_from_dir(dir_path: &Path) -> Result<Vec<String>, Box<dyn std::
 
         // Collect all items with their bounds
         for item in items.iter_all_items() {
-            let label = item.to_string();
-            all_bounds.push(label);
+            all_bounds.push(item.to_string());
         }
     }
 
@@ -55,54 +54,44 @@ fn test_prune_trait_sandbox() -> Result<(), Box<dyn std::error::Error>> {
     let test_files_dir = Path::new("tests/test_files/trait_sandbox");
     let expected_dir = Path::new("tests/expected/trait_sandbox");
 
-    // Verify test directories exist
-    assert!(
-        test_files_dir.exists(),
-        "Test files directory does not exist: {:?}",
-        test_files_dir
-    );
-    assert!(
-        expected_dir.exists(),
-        "Expected directory does not exist: {:?}",
-        expected_dir
-    );
+    assert!(test_files_dir.exists(), "Missing {:?}", test_files_dir);
+    assert!(expected_dir.exists(), "Missing {:?}", expected_dir);
 
-    // Create temporary directory
+    // Temporary working directory
     let temp_dir = TempDir::new()?;
     let temp_path = temp_dir.path();
-
-    // Copy test files to temporary directory
     copy_dir_recursive(test_files_dir, temp_path)?;
 
-    // Build the trait-winnower binary path
+    // Ensure the binary exists
+    Command::new("cargo")
+        .args(&["build", "--bin", "trait-winnower"])
+        .status()
+        .expect("Failed to build trait-winnower binary before running test");
+
     let binary_path = if cfg!(debug_assertions) {
         "target/debug/trait-winnower"
     } else {
         "target/release/trait-winnower"
     };
 
-    // Run trait-winnower prune command
+    // Run the prune command
     let output = Command::new(binary_path)
         .args(&["prune", "-n", "all", "-t", "all", "--brute-force"])
         .arg(temp_path)
         .output()?;
 
-    // Check if command succeeded
     assert!(
         output.status.success(),
-        "trait-winnower prune failed with status: {}\nstdout: {}\nstderr: {}",
+        "trait-winnower prune failed\nstatus: {}\nstdout:\n{}\nstderr:\n{}",
         output.status,
         String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
+        String::from_utf8_lossy(&output.stderr),
     );
 
-    // Collect bounds from the pruned directory
+    // Compare the collected bounds
     let pruned_bounds = collect_bounds_from_dir(temp_path)?;
-
-    // Collect bounds from the expected directory
     let expected_bounds = collect_bounds_from_dir(expected_dir)?;
 
-    // Compare bounds
     assert_eq!(
         pruned_bounds.len(),
         expected_bounds.len(),
@@ -110,6 +99,7 @@ fn test_prune_trait_sandbox() -> Result<(), Box<dyn std::error::Error>> {
         pruned_bounds.len(),
         expected_bounds.len()
     );
+
     for (i, (pruned, expected)) in pruned_bounds.iter().zip(expected_bounds.iter()).enumerate() {
         assert_eq!(
             pruned, expected,
@@ -118,6 +108,6 @@ fn test_prune_trait_sandbox() -> Result<(), Box<dyn std::error::Error>> {
         );
     }
 
-    println!("All bounds and file contents match expected results!");
+    println!("[+] All bounds and file contents match expected results!");
     Ok(())
 }
